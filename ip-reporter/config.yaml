@@ -1,0 +1,22 @@
+# IP Reporter Configuration
+# Reports Mac's IP address to cloud servers for reverse SSH access
+
+reporters:
+  rhea-dev:
+    method: ssh
+    target: rhea-dev  # SSH host alias (from ~/.ssh/config)
+    command: "echo {ip} > ~/.mac-ip && echo 'Updated at $(date)' >> ~/.mac-ip-log"
+    interval: 300  # Report every 5 minutes
+    on_change: true  # Also report immediately on IP change
+
+# Menu bar display settings
+display:
+  menubar: true
+  show_ip: true
+  show_public_ip: true
+  show_targets: true
+
+# Notification settings
+notifications:
+  on_change: true  # Notify when IP changes
+  on_failure: true  # Notify when report fails

@@ -1,0 +1,3 @@
+pyyaml
+rumps  # macOS menu bar apps
+pytest  # for testing

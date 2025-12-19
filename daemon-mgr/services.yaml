@@ -1,0 +1,38 @@
+# Mac Bridge Services Configuration
+# All services managed by daemonctl
+
+services:
+  ip-reporter:
+    label: com.mac-bridge.ip-reporter
+    description: "Reports Mac IP to cloud servers for reverse SSH"
+    program: python3
+    args:
+      - ../ip-reporter/reporter.py
+    working_directory: ${HOME}/repos-personal/mac-bridge/ip-reporter
+    run_at_load: true
+    keep_alive: true
+    log_path: ~/Library/Logs/mac-bridge/ip-reporter.log
+    error_log_path: ~/Library/Logs/mac-bridge/ip-reporter.error.log
+
+  ip-reporter-menubar:
+    label: com.mac-bridge.ip-reporter-menubar
+    description: "Menu bar UI for IP reporter"
+    program: python3
+    args:
+      - ../ip-reporter/menubar.py
+    working_directory: ${HOME}/repos-personal/mac-bridge/ip-reporter
+    run_at_load: true
+    keep_alive: false  # User can quit menu bar app
+    log_path: ~/Library/Logs/mac-bridge/ip-reporter-menubar.log
+
+  # Future services (commented out until implemented)
+  # data-sync:
+  #   label: com.mac-bridge.data-sync
+  #   description: "Syncs Messages, Calls, Contacts to PostgreSQL"
+  #   program: python3
+  #   args:
+  #     - ../data-sync/sync_daemon.py
+  #   working_directory: ${HOME}/repos-personal/mac-bridge/data-sync
+  #   run_at_load: true
+  #   keep_alive: true
+  #   log_path: ~/Library/Logs/mac-bridge/data-sync.log
