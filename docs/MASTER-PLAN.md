@@ -114,9 +114,45 @@ PostgreSQL schema on rhea-dev that stores synchronized data.
 3. Views for AI-friendly queries
 4. Audit logging
 
-### Component 4: `reeves-cloud-api` (Future)
+### Component 4: `ip-reporter` (Phone Home Service)
+
+launchd daemon that reports Mac's IP to rhea-dev, enabling reverse SSH access.
+
+**Features:**
+1. Detect current public/local IP
+2. Report to rhea-dev via SSH (`echo $IP > ~/.mac-ip`)
+3. Report on schedule (every 5 min) and on IP change
+4. Menu bar UI showing IP and report status
+5. Configurable targets (multiple servers)
+
+### Component 5: `daemon-mgr` (Service Management)
+
+CLI tool to manage all mac-bridge LaunchAgents.
+
+**Features:**
+1. `daemonctl status` - Show all services
+2. `daemonctl start/stop <service>` - Control services
+3. `daemonctl install` - Generate and install LaunchAgents
+4. `daemonctl logs <service>` - View logs
+5. Unified service definitions in `services.yaml`
+
+### Component 6: `reeves-cloud-api` (Future)
 
 API service on rhea-dev for AI access to synchronized data.
+
+---
+
+## Consolidation Notes (Dec 2025)
+
+**Decision: Single repo for all Mac→Cloud infrastructure**
+
+| Previous Location | Action | New Location |
+|-------------------|--------|--------------|
+| `daniel-mac-services/rheafilewatcher` | Archive | N/A (audio-specific) |
+| `dshanklin-bv/daemonctl` | Delete | `mac-bridge/daemon-mgr/` |
+| `RheaRDP.app` | **KEEP SEPARATE** | N/A (RDP client only) |
+
+**RheaRDP stays separate** - it's a GUI app for RDP, not infrastructure.
 
 ---
 
@@ -209,43 +245,34 @@ Single canonical contact from multiple sources:
 ```
 dshanklin-bv/mac-bridge/
 ├── README.md
-├── CHECKLIST-01-mac-bridge-mcp.md
-├── CHECKLIST-02-rhea-postgres-schema.md
-├── CHECKLIST-03-mac-sync-daemon.md
-├── mac-bridge-mcp/
+├── docs/
+│   ├── MASTER-PLAN.md
+│   ├── CHECKLIST-01-mac-bridge-mcp.md
+│   ├── CHECKLIST-02-rhea-postgres-schema.md
+│   ├── CHECKLIST-03-mac-sync-daemon.md
+│   ├── CHECKLIST-04-ip-reporter.md
+│   └── CHECKLIST-05-daemon-mgr.md
+├── mac-bridge-mcp/              # MCP server for Claude Code
 │   ├── pyproject.toml
-│   ├── src/
-│   │   └── mac_bridge_mcp/
-│   │       ├── __init__.py
-│   │       ├── server.py          # FastMCP server
-│   │       ├── messages.py        # Messages functionality
-│   │       ├── calls.py           # Call history
-│   │       ├── contacts.py        # Unified contacts
-│   │       ├── insights.py        # Proactive insights
-│   │       └── confirmation.py    # Human-in-the-loop
-│   └── tests/
-├── mac-sync-daemon/
+│   └── src/mac_bridge_mcp/
+├── mac-sync-daemon/             # Data sync to PostgreSQL
 │   ├── pyproject.toml
-│   ├── src/
-│   │   └── mac_sync_daemon/
-│   │       ├── __init__.py
-│   │       ├── daemon.py          # Main daemon
-│   │       ├── watchers/          # Database watchers
-│   │       ├── sync/              # Sync engine
-│   │       └── postgres/          # PostgreSQL client
-│   ├── launchd/
-│   │   └── com.dshanklin.mac-sync-daemon.plist
-│   └── tests/
-├── rhea-postgres-schema/
-│   ├── migrations/
-│   │   ├── 001_initial_schema.sql
-│   │   ├── 002_triggers.sql
-│   │   └── 003_views.sql
-│   └── seed/
-└── docs/
-    ├── architecture.md
-    ├── setup-guide.md
-    └── troubleshooting.md
+│   ├── src/mac_sync_daemon/
+│   └── launchd/
+├── ip-reporter/                 # Phone home service
+│   ├── reporter.py              # Core IP detection + report
+│   ├── menubar.py               # Menu bar UI (rumps)
+│   ├── config.yaml              # Target servers
+│   └── requirements.txt
+├── daemon-mgr/                  # Service management CLI
+│   ├── daemonctl.py             # CLI entry point
+│   ├── services.yaml            # Service definitions
+│   └── generators/launchd.py
+├── rhea-postgres-schema/        # Cloud database
+│   └── migrations/
+└── launchagents/                # Generated plist files
+    ├── com.mac-bridge.sync.plist
+    └── com.mac-bridge.ip-reporter.plist
 ```
 
 ---
