@@ -2,6 +2,28 @@
 # All services managed by daemonctl
 
 services:
+  reverse-tunnel:
+    label: com.mac-bridge.reverse-tunnel
+    description: "Reverse SSH tunnel to rhea-dev for remote access"
+    program: /opt/homebrew/bin/autossh
+    args:
+      - "-M"
+      - "0"                          # No monitoring port (use ServerAliveInterval)
+      - "-N"                         # No remote command
+      - "-o"
+      - "ServerAliveInterval=30"     # Keepalive every 30s
+      - "-o"
+      - "ServerAliveCountMax=3"      # Disconnect after 3 missed
+      - "-o"
+      - "ExitOnForwardFailure=yes"   # Exit if tunnel fails
+      - "-R"
+      - "2222:localhost:22"          # Remote port 2222 -> local SSH
+      - "rhea-dev"
+    run_at_load: true
+    keep_alive: true
+    log_path: ~/Library/Logs/mac-bridge/reverse-tunnel.log
+    error_log_path: ~/Library/Logs/mac-bridge/reverse-tunnel.error.log
+
   ip-reporter:
     label: com.mac-bridge.ip-reporter
     description: "Reports Mac IP to cloud servers for reverse SSH"
