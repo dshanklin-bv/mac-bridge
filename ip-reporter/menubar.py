@@ -47,7 +47,7 @@ class MacBridgeApp(rumps.App):
     """Menu bar app for Mac Bridge status."""
 
     def __init__(self):
-        super().__init__("🌉", quit_button=None)
+        super().__init__("∴", quit_button=None)  # Triangle of dots
 
         self.reporter = IPReporter()
         self._checking = False
@@ -198,14 +198,15 @@ class MacBridgeApp(rumps.App):
         tunnel_ok = self.tunnel_status.get("connected")
         rhea_ok = self.server_status.get("rhea-dev", {}).get("online")
 
+        # ∴ = therefore symbol (triangle of 3 dots)
         if tunnel_ok is None:
-            self.title = "🌉"  # Not checked yet
+            self.title = "∴"  # Not checked yet
         elif tunnel_ok and rhea_ok:
-            self.title = "🌉"  # All good
+            self.title = "∴"  # All good
         elif tunnel_ok:
-            self.title = "🌉⚠️"  # Tunnel ok, server issue
+            self.title = "∴⚠️"  # Tunnel ok, server issue
         else:
-            self.title = "🌉❌"  # Tunnel down
+            self.title = "∴❌"  # Tunnel down
 
     # Callbacks
 
