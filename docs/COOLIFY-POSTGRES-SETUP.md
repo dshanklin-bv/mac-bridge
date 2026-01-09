@@ -85,35 +85,43 @@ A source-agnostic messaging layer using medallion architecture:
 
 ---
 
-## Step 1: Create Database in Coolify
+## Step 1: Connect to pg-rhea
 
-### Option A: Use Existing `rhea_apps` Database
+**pg-rhea** is the shared PostgreSQL 17 server managed by Coolify.
 
-If `rhea_apps` already exists (used by cliff), add schemas to it:
+| Property | Value |
+|----------|-------|
+| **Container** | `owsks0wg4w88s8g84wk00sow` |
+| **Image** | `pgvector/pgvector:pg17` |
+| **Internal IP** | `10.0.1.5` |
+| **Database** | `comms` |
+| **Schemas** | `bronze`, `silver`, `gold`, `sync` |
 
-1. Connect to existing database
-2. Run schema creation SQL below
+### Connection Methods
 
-### Option B: Create Dedicated Database
+**From rhea-dev (direct):**
+```bash
+docker exec -it owsks0wg4w88s8g84wk00sow psql -U postgres -d comms
+```
 
-1. **Login to Coolify:** http://162.220.24.23:8000
+**From other Coolify services:**
+```
+postgresql://postgres:PASSWORD@owsks0wg4w88s8g84wk00sow:5432/comms
+```
 
-2. **Create New Resource:**
-   - Click **"+ New"** → **"Database"** → **"PostgreSQL"**
+**Via Janus SQL Proxy (recommended for agents):**
+```python
+# Use janus_sql_execute MCP tool (update to use comms db)
+janus_sql_execute(sql="SELECT * FROM gold.messages LIMIT 10", database="comms")
+```
 
-3. **Configure:**
+### Database Layout on pg-rhea
 
-   | Setting | Value |
-   |---------|-------|
-   | **Name** | `djs-life-db` |
-   | **PostgreSQL Version** | `17-alpine` |
-   | **Database Name** | `djs_life` |
-   | **Username** | `daniel` |
-   | **Password** | (generate secure) |
-   | **Public Port** | `5433` |
-   | **Publicly Accessible** | `Yes` |
-
-4. **Deploy** and wait for healthy status
+| Database | Purpose |
+|----------|---------|
+| `argus` | Status page, devlogs, tickets |
+| `rhea_apps` | Ansel photo library, other apps |
+| `comms` | **Unified messaging** (this project) |
 
 ---
 
@@ -641,32 +649,28 @@ $$ LANGUAGE plpgsql IMMUTABLE;
 
 ---
 
-## Step 3: Store Credentials
+## Step 3: Credentials
 
-On the Mac, store the database password in Keychain:
+pg-rhea credentials are managed via Coolify/Infisical. For mac-sync-daemon:
 
+**Option A: SSH tunnel (no password needed on Mac)**
+```python
+# Sync daemon connects via SSH tunnel to rhea-dev
+# Then uses postgres user with trust auth inside container
+```
+
+**Option B: Store in Keychain (if exposing port publicly)**
 ```bash
 security add-generic-password \
-    -a "djs-life-sync" \
-    -s "djs-life-postgres" \
-    -w "YOUR_PASSWORD_HERE" \
+    -a "mac-sync-daemon" \
+    -s "pg-rhea" \
+    -w "PASSWORD_FROM_COOLIFY" \
     -U
 ```
 
-Retrieve in Python:
-
-```python
-import subprocess
-
-def get_db_password():
-    result = subprocess.run(
-        ["security", "find-generic-password",
-         "-a", "djs-life-sync",
-         "-s", "djs-life-postgres",
-         "-w"],
-        capture_output=True, text=True
-    )
-    return result.stdout.strip()
+**Option C: Environment variable (for containerized sync)**
+```bash
+export RHEA_APPS_DB="postgresql://postgres:PASSWORD@owsks0wg4w88s8g84wk00sow:5432/rhea_apps"
 ```
 
 ---
@@ -674,19 +678,16 @@ def get_db_password():
 ## Step 4: Verify Setup
 
 ```bash
-# From Mac
-psql -h 162.220.24.23 -p 5433 -U daniel -d djs_life -c "
-    SELECT schema_name FROM information_schema.schemata
-    WHERE schema_name IN ('bronze', 'silver', 'gold', 'sync');
-"
-
-# Should return: bronze, silver, gold, sync
+# From rhea-dev
+docker exec -it owsks0wg4w88s8g84wk00sow psql -U postgres -d comms -c "\dn+"
 
 # Check sources
-psql -h 162.220.24.23 -p 5433 -U daniel -d djs_life -c "
+docker exec -it owsks0wg4w88s8g84wk00sow psql -U postgres -d comms -c "
     SELECT name, display_name, enabled FROM sync.sources;
 "
 ```
+
+**Status:** Schema created 2025-01-09.
 
 ---
 
@@ -694,15 +695,26 @@ psql -h 162.220.24.23 -p 5433 -U daniel -d djs_life -c "
 
 | Field | Value |
 |-------|-------|
-| **Host** | `162.220.24.23` |
-| **Port** | `5433` |
-| **Database** | `djs_life` |
-| **User** | `daniel` |
+| **Server** | `pg-rhea` (Coolify-managed) |
+| **Container** | `owsks0wg4w88s8g84wk00sow` |
+| **Internal Host** | `10.0.1.5` or container name |
+| **Port** | `5432` (internal only) |
+| **Database** | `comms` |
+| **User** | `postgres` |
 | **Schemas** | `bronze`, `silver`, `gold`, `sync` |
 
-**Connection String:**
+**From Coolify network:**
 ```
-postgresql://daniel:PASSWORD@162.220.24.23:5433/djs_life
+postgresql://postgres:PASSWORD@owsks0wg4w88s8g84wk00sow:5432/comms
+```
+
+**From Mac (via SSH tunnel):**
+```bash
+# Open tunnel
+ssh -L 5432:10.0.1.5:5432 rhea-dev
+
+# Then connect locally
+psql -h localhost -p 5432 -U postgres -d comms
 ```
 
 ---
@@ -767,13 +779,12 @@ The gold layer becomes the **single source of truth** for all messaging.
 
 ## Next Steps
 
-1. [ ] Provision database in Coolify
-2. [ ] Run schema SQL
-3. [ ] Store credentials in Keychain
-4. [ ] Build mac-sync-daemon (bronze layer sync)
-5. [ ] Build transformation jobs (bronze → silver → gold)
-6. [ ] Integrate cliff email data
-7. [ ] Build MCP server for Claude access
+1. [x] Create `comms` database on pg-rhea (done 2025-01-09)
+2. [x] Run schema SQL (bronze/silver/gold/sync) (done 2025-01-09)
+3. [ ] Build mac-sync-daemon (bronze layer sync)
+4. [ ] Build transformation jobs (bronze → silver → gold)
+5. [ ] Integrate cliff email data into gold layer
+6. [ ] Build MCP server for Claude access to gold layer
 
 ---
 
