@@ -125,9 +125,9 @@ def download_icloud(limit: int = 100, batch_size: int = 10):
 
         print(f"\nBatch {i//batch_size + 1}: Downloading {len(batch)} photos...")
 
-        # Build osxphotos command
+        # Build osxphotos command - use UUID prefix for easy matching
         uuid_args = " ".join([f"--uuid {u}" for u in uuids])
-        cmd = f"osxphotos export {export_dir} --download-missing {uuid_args}"
+        cmd = f'osxphotos export {export_dir} --update --download-missing --filename "{{uuid}}_{{original_name}}" {uuid_args}'
 
         try:
             start = time.time()
@@ -145,11 +145,11 @@ def download_icloud(limit: int = 100, batch_size: int = 10):
                 failed += len(batch)
                 continue
 
-            # Find and transfer exported files
+            # Find and transfer exported files (named {uuid}_{original_name})
             for uuid in uuids:
                 found = False
-                for f in export_dir.rglob(f"*"):
-                    if uuid in f.name and f.is_file():
+                for f in export_dir.rglob(f"{uuid}_*"):
+                    if f.is_file() and not f.name.startswith('.'):
                         server_path = uuid_to_server[uuid]
                         if transfer_file(f, server_path):
                             update_sync_status(uuid, 'synced')
@@ -224,11 +224,28 @@ def transfer_local():
     return 0 if failed == 0 else 1
 
 
+def overnight_download():
+    """
+    Run aggressive iCloud download overnight.
+
+    Downloads up to 500 photos in larger batches, designed to run
+    for several hours when you don't need your Mac.
+    """
+    logger = get_logger(__name__)
+
+    print("🌙 Starting overnight iCloud download mode")
+    print("This will download up to 500 photos (~16 hours at 2 min/photo)")
+    print("Press Ctrl+C to stop at any time")
+    print()
+
+    return download_icloud(limit=500, batch_size=25)
+
+
 def main():
     parser = argparse.ArgumentParser(description='Photo-specific operations')
     parser.add_argument(
         'command',
-        choices=['stats', 'download', 'transfer'],
+        choices=['stats', 'download', 'transfer', 'overnight'],
         help='Command to run'
     )
     parser.add_argument(
@@ -255,6 +272,8 @@ def main():
         sys.exit(download_icloud(limit=args.limit, batch_size=args.batch_size))
     elif args.command == 'transfer':
         sys.exit(transfer_local())
+    elif args.command == 'overnight':
+        sys.exit(overnight_download())
 
 
 if __name__ == '__main__':

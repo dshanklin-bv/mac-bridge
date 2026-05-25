@@ -43,7 +43,7 @@ def _batch_upsert(cur, table: str, columns: List[str], values: List[Tuple],
         columns: Column names
         values: List of value tuples
         conflict_col: Column for ON CONFLICT
-        update_cols: Columns to update on conflict
+        update_cols: Columns to update on conflict (empty = DO NOTHING)
 
     Returns:
         Number of rows affected
@@ -52,13 +52,18 @@ def _batch_upsert(cur, table: str, columns: List[str], values: List[Tuple],
         return 0
 
     col_list = ", ".join(columns)
-    update_set = ", ".join(f"{c} = EXCLUDED.{c}" for c in update_cols)
-    update_set += ", synced_at = NOW()"
+
+    if update_cols:
+        update_set = ", ".join(f"{c} = EXCLUDED.{c}" for c in update_cols)
+        update_set += ", synced_at = NOW()"
+        conflict_action = f"DO UPDATE SET {update_set}"
+    else:
+        conflict_action = "DO NOTHING"
 
     sql = f"""
         INSERT INTO {table} ({col_list})
         VALUES %s
-        ON CONFLICT ({conflict_col}) DO UPDATE SET {update_set}
+        ON CONFLICT ({conflict_col}) {conflict_action}
     """
 
     execute_values(cur, sql, values, page_size=BATCH_SIZE)
@@ -111,6 +116,38 @@ def sync() -> int:
         """)
         chat_messages = {row['message_id']: row['chat_id']
                         for row in local_cur.fetchall()}
+
+        # Get attachments (always full sync - needed for joins)
+        local_cur.execute("""
+            SELECT
+                ROWID as rowid,
+                guid,
+                created_date,
+                filename,
+                uti,
+                mime_type,
+                transfer_state,
+                is_outgoing,
+                total_bytes,
+                is_sticker,
+                hide_attachment
+            FROM attachment
+        """)
+        attachments = [(
+            row['rowid'], row['guid'], str(row['created_date']) if row['created_date'] else None,
+            row['filename'], row['uti'], row['mime_type'], row['transfer_state'],
+            bool(row['is_outgoing']), row['total_bytes'] or 0,
+            bool(row['is_sticker']), bool(row['hide_attachment'])
+        ) for row in local_cur.fetchall()]
+        logger.info(f"Found {len(attachments)} attachments locally")
+
+        # Get message-attachment joins
+        local_cur.execute("""
+            SELECT message_id, attachment_id FROM message_attachment_join
+        """)
+        msg_attach_joins = [(row['message_id'], row['attachment_id'])
+                           for row in local_cur.fetchall()]
+        logger.info(f"Found {len(msg_attach_joins)} message-attachment links")
 
         # Get messages (incremental if watermark exists)
         if watermark:
@@ -202,6 +239,27 @@ def sync() -> int:
                     messages,
                     "mac_rowid",
                     ["text", "date_read_apple", "date_delivered_apple"]
+                )
+
+                # Sync attachments
+                logger.info("Syncing attachments...")
+                _batch_upsert(
+                    cur, "bronze.apple_attachments",
+                    ["mac_rowid", "guid", "created_date", "filename", "uti", "mime_type",
+                     "transfer_state", "is_outgoing", "total_bytes", "is_sticker", "hide_attachment"],
+                    attachments,
+                    "mac_rowid",
+                    ["filename", "mime_type", "transfer_state", "total_bytes"]
+                )
+
+                # Sync message-attachment joins
+                logger.info("Syncing message-attachment joins...")
+                _batch_upsert(
+                    cur, "bronze.apple_message_attachment_join",
+                    ["message_mac_rowid", "attachment_mac_rowid"],
+                    msg_attach_joins,
+                    "message_mac_rowid, attachment_mac_rowid",
+                    []  # No updates needed - just insert if missing
                 )
 
             conn.commit()

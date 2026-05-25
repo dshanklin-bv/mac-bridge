@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tosh-nsfw-cli"
+version = "0.1.0"
+description = "CLI tool for detecting NSFW photos in Apple Photos library"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "ojo>=1.1.0",
+    "osxphotos>=0.68.0",
+    "psycopg2-binary>=2.9.0",
+    "rich>=13.0.0",
+    "pyyaml>=6.0",
+    "pillow>=10.0.0",
+    "pillow-heif>=0.18.0",
+    "flask>=3.0.0",
+    "photoscript>=0.3.0",
+]
+
+[project.scripts]
+tosh-nsfw = "tosh_nsfw.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["tosh_nsfw*"]

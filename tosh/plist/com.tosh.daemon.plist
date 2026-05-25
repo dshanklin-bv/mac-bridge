@@ -5,33 +5,42 @@
     <key>Label</key>
     <string>com.tosh.daemon</string>
 
+    <!-- Master daemon that spawns child processes -->
     <key>ProgramArguments</key>
     <array>
+        <string>/bin/bash</string>
         <string>/Users/dshanklinbv/repos-personal/mac-bridge/tosh/scripts/run-daemon.sh</string>
     </array>
 
+    <!-- Run every 15 minutes -->
     <key>StartInterval</key>
     <integer>900</integer>
 
+    <!-- Start on login -->
     <key>RunAtLoad</key>
     <true/>
 
+    <!-- Restart if master crashes -->
     <key>KeepAlive</key>
-    <false/>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
 
+    <!-- Logging -->
     <key>StandardOutPath</key>
-    <string>/Users/dshanklinbv/.local/log/tosh-daemon.log</string>
+    <string>/Users/dshanklinbv/.tosh/logs/daemon.log</string>
 
     <key>StandardErrorPath</key>
-    <string>/Users/dshanklinbv/.local/log/tosh-daemon.err</string>
+    <string>/Users/dshanklinbv/.tosh/logs/daemon.err</string>
 
     <key>WorkingDirectory</key>
-    <string>/Users/dshanklinbv/repos-personal/mac-bridge/tosh</string>
+    <string>/Users/dshanklinbv/repos-personal/mac-bridge</string>
 
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
-        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+        <string>/Users/dshanklinbv/.pyenv/versions/3.12.7/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
         <key>PYTHONPATH</key>
         <string>/Users/dshanklinbv/repos-personal/mac-bridge</string>
     </dict>

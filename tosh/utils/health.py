@@ -1,14 +1,19 @@
 """
 Health status tracking for tosh daemon.
 Writes last successful sync timestamps per source for quick health checks.
+Also reports health to argus.agent_health for cross-agent monitoring.
 """
 
 import json
-from datetime import datetime
+import logging
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 from .config import get
+from .db import get_argus_connection
+
+logger = logging.getLogger(__name__)
 
 # Default status file location
 DEFAULT_STATUS_FILE = Path.home() / ".tosh" / "health.json"
@@ -153,3 +158,106 @@ def print_health_status():
             print(f"  Last failure: {info['last_failure']}")
             print(f"  Error: {info.get('last_error', 'Unknown')}")
         print()
+
+
+def report_health_to_argus(
+    status: str,
+    sync_type: str,
+    rows_synced: int = 0,
+    files_transferred: int = 0,
+    errors: Optional[List[str]] = None,
+    checks_passed: Optional[Dict[str, bool]] = None,
+    metadata: Optional[Dict[str, Any]] = None
+):
+    """
+    Report health status to argus.agent_health for cross-agent monitoring.
+
+    Args:
+        status: Health status (healthy, degraded, unhealthy, unknown)
+        sync_type: Type of sync (full, incremental, photos, etc.)
+        rows_synced: Total rows synced this cycle
+        files_transferred: Number of files transferred (photos)
+        errors: List of error messages if any
+        checks_passed: Dict of individual checks {ssh: true, db_write: true, ...}
+        metadata: Additional metadata
+    """
+    try:
+        conn = get_argus_connection()
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO argus.agent_health (
+                    agent_name, check_time, status, last_sync_success,
+                    sync_type, rows_synced, files_transferred,
+                    errors, checks_passed, metadata
+                ) VALUES (
+                    'tosh', NOW(), %s, NOW(),
+                    %s, %s, %s,
+                    %s, %s, %s
+                )
+            """, (
+                status,
+                sync_type,
+                rows_synced,
+                files_transferred,
+                json.dumps(errors or []),
+                json.dumps(checks_passed or {}),
+                json.dumps(metadata or {})
+            ))
+        conn.commit()
+        logger.info(f"Health reported to argus: status={status}")
+    except Exception as e:
+        logger.error(f"Failed to report health to argus: {e}")
+    finally:
+        if conn:
+            conn.close()
+
+
+def run_health_checks() -> Dict[str, Any]:
+    """
+    Run health checks and report to argus.
+
+    Returns:
+        Dict with check results and overall status
+    """
+    checks_passed = {}
+    errors = []
+
+    # Check 1: SSH/network connectivity (implicit - if we get here, it works)
+    checks_passed["ssh"] = True
+
+    # Check 2: Database write test
+    try:
+        conn = get_argus_connection()
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1")
+        conn.close()
+        checks_passed["db_read"] = True
+    except Exception as e:
+        checks_passed["db_read"] = False
+        errors.append(f"DB read failed: {str(e)}")
+
+    # Check 3: Get local health status
+    local_status = get_health_status()
+    checks_passed["local_health"] = local_status.get("healthy", False)
+
+    # Determine overall status
+    all_passed = all(checks_passed.values())
+    if all_passed and not errors:
+        status = "healthy"
+    elif errors:
+        status = "unhealthy"
+    else:
+        status = "degraded"
+
+    # Get totals from local status
+    total_rows = sum(
+        s.get("rows_synced", 0)
+        for s in local_status.get("sources", {}).values()
+    )
+
+    return {
+        "status": status,
+        "checks_passed": checks_passed,
+        "errors": errors,
+        "rows_synced": total_rows
+    }

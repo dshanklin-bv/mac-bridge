@@ -323,12 +323,12 @@ def export_from_icloud(limit: int = 100, dest_dir: str = "/tmp/photos_export") -
     logger.info(f"Found {len(uuids)} photos to export from iCloud")
 
     # Use osxphotos CLI with --download-missing
-    # Export specific UUIDs
+    # Export specific UUIDs with UUID prefix for easy matching
     uuid_args = " ".join([f"--uuid {u}" for u in uuids[:limit]])
 
     try:
         result = subprocess.run(
-            f"osxphotos export {dest_dir} --download-missing {uuid_args}",
+            f'osxphotos export {dest_dir} --update --download-missing --filename "{{uuid}}_{{original_name}}" {uuid_args}',
             shell=True,
             capture_output=True,
             text=True,
@@ -346,12 +346,12 @@ def export_from_icloud(limit: int = 100, dest_dir: str = "/tmp/photos_export") -
         logger.error(f"Export error: {e}")
         return 0
 
-    # Find exported files and transfer to server
+    # Find exported files and transfer to server (named {uuid}_{original_name})
     exported_count = 0
     for uuid in uuids:
         # Find the exported file
-        for f in Path(dest_dir).rglob(f"*{uuid}*"):
-            if f.is_file():
+        for f in Path(dest_dir).rglob(f"{uuid}_*"):
+            if f.is_file() and not f.name.startswith('.'):
                 server_path = uuid_to_server_path.get(uuid)
                 if server_path and transfer_file(f, server_path):
                     update_sync_status(uuid, 'synced')
